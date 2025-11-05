@@ -35,9 +35,18 @@ module.exports = async (req, res) => {
       // Webflow sends signature as: timestamp.signature
       const [timestamp, signature] = webhookSignature.split('.');
 
+      console.log('[SYNC DEBUG] Webhook signature received:', webhookSignature);
+      console.log('[SYNC DEBUG] Timestamp:', timestamp);
+      console.log('[SYNC DEBUG] Signature:', signature);
+      console.log('[SYNC DEBUG] Secret exists:', !!webhookSecret);
+      console.log('[SYNC DEBUG] Secret starts with:', webhookSecret?.substring(0, 10));
+      console.log('[SYNC DEBUG] Body:', JSON.stringify(req.body));
+
       // Construct the signed payload
       const payload = JSON.stringify(req.body);
       const signedPayload = `${timestamp}.${payload}`;
+
+      console.log('[SYNC DEBUG] Signed payload:', signedPayload);
 
       // Calculate expected signature
       const expectedSignature = crypto
@@ -45,13 +54,21 @@ module.exports = async (req, res) => {
         .update(signedPayload)
         .digest('hex');
 
+      console.log('[SYNC DEBUG] Expected signature:', expectedSignature);
+      console.log('[SYNC DEBUG] Received signature:', signature);
+      console.log('[SYNC DEBUG] Match:', signature === expectedSignature);
+
       // Verify signature matches
       if (signature !== expectedSignature) {
-        console.error('[SYNC] Invalid webhook signature');
+        console.error('[SYNC] Invalid webhook signature - MISMATCH!');
         return res.status(401).json({
           success: false,
           error: 'Invalid webhook signature',
-          message: 'Webhook verification failed'
+          message: 'Webhook verification failed',
+          debug: {
+            received: signature?.substring(0, 10),
+            expected: expectedSignature?.substring(0, 10)
+          }
         });
       }
 
