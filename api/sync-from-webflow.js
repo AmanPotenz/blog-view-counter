@@ -25,31 +25,50 @@ module.exports = async (req, res) => {
   }
 
   // ============================================
-  // Webhook Security: TEMPORARILY DISABLED FOR DEBUGGING
+  // Webhook Security: Verify signature
   // ============================================
   const webhookSignature = req.headers['x-webflow-signature'];
+  const webhookSecret = process.env.WEBFLOW_WEBHOOK_SECRET_PUBLISH;
 
-  if (webhookSignature) {
-    console.log('[SYNC] ⚠️ Webhook signature present but verification TEMPORARILY DISABLED');
-    console.log('[SYNC] Signature received:', webhookSignature);
-    console.log('[SYNC] Headers:', JSON.stringify(req.headers));
-  } else {
+  if (webhookSignature && webhookSecret) {
+    try {
+      // Webflow sends signature as: timestamp.signature
+      const [timestamp, signature] = webhookSignature.split('.');
+
+      // Construct the signed payload
+      const payload = JSON.stringify(req.body);
+      const signedPayload = `${timestamp}.${payload}`;
+
+      // Calculate expected signature
+      const expectedSignature = crypto
+        .createHmac('sha256', webhookSecret)
+        .update(signedPayload)
+        .digest('hex');
+
+      // Verify signature matches
+      if (signature !== expectedSignature) {
+        console.error('[SYNC] Invalid webhook signature');
+        return res.status(401).json({
+          success: false,
+          error: 'Invalid webhook signature',
+          message: 'Webhook verification failed'
+        });
+      }
+
+      console.log('[SYNC] ✅ Webhook signature verified');
+    } catch (error) {
+      console.error('[SYNC] Error verifying webhook signature:', error);
+      return res.status(401).json({
+        success: false,
+        error: 'Webhook verification error',
+        details: error.message
+      });
+    }
+  } else if (webhookSignature && !webhookSecret) {
+    console.warn('[SYNC] ⚠️ Webhook signature present but no secret configured');
+  } else if (!webhookSignature) {
     console.log('[SYNC] No webhook signature present (manual call)');
   }
-
-  // TODO: Re-enable signature verification after debugging
-  // Keeping this commented for now
-  /*
-  const webhookSecrets = [
-    process.env.WEBFLOW_WEBHOOK_SECRET_PUBLISH,
-    process.env.WEBFLOW_WEBHOOK_SECRET_CREATE,
-    process.env.WEBFLOW_WEBHOOK_SECRET
-  ].filter(Boolean);
-
-  if (webhookSignature && webhookSecrets.length > 0) {
-    // ... verification code ...
-  }
-  */
 
   // ============================================
   // DEDUPLICATION: Acquire lock to prevent race conditions
