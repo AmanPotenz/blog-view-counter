@@ -64,10 +64,36 @@ module.exports = async (req, res) => {
       if (records.length === 0) {
         // Record doesn't exist - CREATE IT AUTOMATICALLY!
         console.log(`[AUTO-CREATE] Creating new record for slug: ${slug}`);
+
+        // Try to fetch the title from Webflow CMS
+        let blogTitle = slug; // Default to slug if we can't get title
+        try {
+          const webflowResponse = await fetch(
+            `https://api.webflow.com/v2/collections/${process.env.WEBFLOW_COLLECTION_ID}/items?fieldData.slug=${slug}`,
+            {
+              headers: {
+                'Authorization': `Bearer ${process.env.WEBFLOW_API_TOKEN}`,
+                'accept': 'application/json'
+              }
+            }
+          );
+
+          if (webflowResponse.ok) {
+            const webflowData = await webflowResponse.json();
+            if (webflowData.items && webflowData.items.length > 0) {
+              blogTitle = webflowData.items[0].fieldData?.name || slug;
+              console.log(`[AUTO-CREATE] Found blog title in Webflow: "${blogTitle}"`);
+            }
+          }
+        } catch (error) {
+          console.warn(`[AUTO-CREATE] Could not fetch title from Webflow: ${error.message}`);
+        }
+
         const newRecords = await base(process.env.AIRTABLE_TABLE_NAME).create([
           {
             fields: {
               slug: slug,
+              title: blogTitle,  // Save the title from Webflow
               view_count: 1,
               old_views: 0  // New blogs from Webflow start with 0 old views
             }
@@ -77,7 +103,7 @@ module.exports = async (req, res) => {
         newCount = 1;
         wasCreated = true;
 
-        console.log(`[AUTO-CREATE] Successfully created record with view_count: 1, old_views: 0`);
+        console.log(`[AUTO-CREATE] Successfully created record with title: "${blogTitle}", view_count: 1, old_views: 0`);
       } else {
         // Record exists - UPDATE IT
         const record = records[0];

@@ -15,7 +15,10 @@
       "Bash(git add:*)",
       "Bash(git commit:*)",
       "Bash(git remote add:*)",
-      "Bash(git push:*)"
+      "Bash(git push:*)",
+      "Bash(vercel env:*)",
+      "Bash(powershell -ExecutionPolicy Bypass -File \"test-sync-from-webflow.ps1\")",
+      "Bash(powershell:*)"
     ],
     "deny": [],
     "ask": []
