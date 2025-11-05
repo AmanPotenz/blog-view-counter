@@ -35,16 +35,47 @@ module.exports = async (req, res) => {
   }
 
   // ============================================
-  // Webhook Security: DISABLED (signature verification not working)
+  // Webhook Security: Verify signature using RAW body
   // ============================================
   const webhookSignature = req.headers['x-webflow-signature'];
 
+  // Get raw body BEFORE parsing (this is the exact bytes Webflow signed)
+  const rawBody = await getRawBody(req);
+
+  // Parse body for our use
+  let parsedBody;
+  try {
+    parsedBody = rawBody ? JSON.parse(rawBody) : {};
+  } catch (e) {
+    parsedBody = {};
+  }
+
+  // Attach parsed body to req for later use
+  req.body = parsedBody;
+
   if (webhookSignature) {
-    console.log('[SYNC] ⚠️ Webhook signature present but verification DISABLED');
-    console.log('[SYNC] Signature:', webhookSignature);
-    // TODO: Fix signature verification - Webflow's signing method unclear
+    console.log('[SYNC] 🔐 Verifying webhook signature...');
+
+    // Calculate expected signature using RAW body (exactly what Webflow signed)
+    const expectedSignature = crypto
+      .createHmac('sha256', process.env.WEBFLOW_WEBHOOK_SECRET_PUBLISH)
+      .update(rawBody) // Sign the RAW body, not parsed JSON
+      .digest('hex');
+
+    console.log('[SYNC] Expected signature:', expectedSignature);
+    console.log('[SYNC] Received signature:', webhookSignature);
+
+    if (expectedSignature !== webhookSignature) {
+      console.log('[SYNC] ❌ Invalid webhook signature');
+      return res.status(401).json({
+        error: 'Invalid webhook signature',
+        hint: 'Make sure WEBFLOW_WEBHOOK_SECRET_PUBLISH matches your webhook secret in Webflow'
+      });
+    }
+
+    console.log('[SYNC] ✅ Webhook signature verified!');
   } else {
-    console.log('[SYNC] No webhook signature (manual call)');
+    console.log('[SYNC] No webhook signature (manual call or testing)');
   }
 
   // ============================================
@@ -265,4 +296,13 @@ module.exports = async (req, res) => {
       details: error.message
     });
   }
+};
+
+// CRITICAL: Disable Vercel's automatic body parsing
+// We need access to the raw request body to verify webhook signatures
+// Without this, Vercel will parse the body before we can read the raw bytes
+module.exports.config = {
+  api: {
+    bodyParser: false,
+  },
 };
