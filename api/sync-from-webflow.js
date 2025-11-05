@@ -57,6 +57,7 @@ module.exports = async (req, res) => {
     console.log('[SYNC] 🔐 Verifying webhook signature...');
     console.log('[SYNC DEBUG] Raw body:', rawBody);
     console.log('[SYNC DEBUG] Raw body length:', rawBody ? rawBody.length : 0);
+    console.log('[SYNC DEBUG] Secret (first 10 chars):', process.env.WEBFLOW_WEBHOOK_SECRET_PUBLISH?.substring(0, 10));
     console.log('[SYNC DEBUG] Secret length:', process.env.WEBFLOW_WEBHOOK_SECRET_PUBLISH?.length);
 
     // Calculate expected signature using RAW body (exactly what Webflow signed)
