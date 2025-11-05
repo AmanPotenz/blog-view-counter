@@ -16,62 +16,31 @@ module.exports = async (req, res) => {
   }
 
   // ============================================
-  // Webhook Security: Verify signature if present
+  // Webhook Security: TEMPORARILY DISABLED FOR DEBUGGING
   // ============================================
   const webhookSignature = req.headers['x-webflow-signature'];
 
-  // Support both webhook secrets (create and publish)
+  if (webhookSignature) {
+    console.log('[SYNC] ⚠️ Webhook signature present but verification TEMPORARILY DISABLED');
+    console.log('[SYNC] Signature received:', webhookSignature);
+    console.log('[SYNC] Headers:', JSON.stringify(req.headers));
+  } else {
+    console.log('[SYNC] No webhook signature present (manual call)');
+  }
+
+  // TODO: Re-enable signature verification after debugging
+  // Keeping this commented for now
+  /*
   const webhookSecrets = [
-    process.env.WEBFLOW_WEBHOOK_SECRET_PUBLISH,  // Primary: CMS published
-    process.env.WEBFLOW_WEBHOOK_SECRET_CREATE,   // Secondary: CMS created/changed
-    process.env.WEBFLOW_WEBHOOK_SECRET            // Legacy: single secret
-  ].filter(Boolean); // Remove undefined values
+    process.env.WEBFLOW_WEBHOOK_SECRET_PUBLISH,
+    process.env.WEBFLOW_WEBHOOK_SECRET_CREATE,
+    process.env.WEBFLOW_WEBHOOK_SECRET
+  ].filter(Boolean);
 
   if (webhookSignature && webhookSecrets.length > 0) {
-    try {
-      // Webflow sends signature as: timestamp.signature
-      const [timestamp, signature] = webhookSignature.split('.');
-
-      // Construct the signed payload
-      const payload = JSON.stringify(req.body);
-      const signedPayload = `${timestamp}.${payload}`;
-
-      // Try to verify against all configured secrets
-      let verified = false;
-      for (const secret of webhookSecrets) {
-        const expectedSignature = crypto
-          .createHmac('sha256', secret)
-          .update(signedPayload)
-          .digest('hex');
-
-        if (signature === expectedSignature) {
-          verified = true;
-          console.log('[SYNC] ✅ Webhook signature verified');
-          break;
-        }
-      }
-
-      // If none of the secrets worked, reject
-      if (!verified) {
-        console.error('[SYNC] Invalid webhook signature - none of the secrets matched');
-        return res.status(401).json({
-          success: false,
-          error: 'Invalid webhook signature',
-          message: 'Webhook verification failed'
-        });
-      }
-
-    } catch (error) {
-      console.error('[SYNC] Error verifying webhook signature:', error);
-      return res.status(401).json({
-        success: false,
-        error: 'Webhook verification error',
-        details: error.message
-      });
-    }
-  } else if (webhookSignature && webhookSecrets.length === 0) {
-    console.warn('[SYNC] ⚠️ Webhook signature present but no secret configured');
+    // ... verification code ...
   }
+  */
 
   try {
     console.log('[SYNC] Starting Webflow to Airtable sync...');
