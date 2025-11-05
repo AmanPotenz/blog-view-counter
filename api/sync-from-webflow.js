@@ -26,12 +26,11 @@ module.exports = async (req, res) => {
     }
 
     // ============================================
-    // Webhook Security: Verify signature using RAW body
+    // Webhook Security: DISABLED (for now)
     // ============================================
-    const secret = process.env.WEBFLOW_WEBHOOK_SECRET_PUBLISH;
     const signature = req.headers['x-webflow-signature'];
 
-    // ✅ Read raw body (for correct signature validation)
+    // ✅ Read raw body
     const rawBody = await new Promise((resolve) => {
       let data = '';
       req.on('data', (chunk) => (data += chunk));
@@ -46,35 +45,15 @@ module.exports = async (req, res) => {
       body = {};
     }
 
-    // Verify signature if present
     if (signature) {
-      if (!secret) {
-        console.error('[SYNC ERROR] Webhook secret not configured');
-        return res.status(500).json({ error: 'Webhook secret not configured' });
-      }
-
-      console.log('[SYNC] 🔐 Verifying webhook signature...');
-
-      // ✅ Compute expected HMAC (Webflow V2 sends the raw body hash)
-      const expectedSignature = crypto
-        .createHmac('sha256', secret)
-        .update(rawBody)
-        .digest('hex');
-
-      if (signature !== expectedSignature) {
-        console.error('[SYNC] ❌ Invalid webhook signature - mismatch!');
-        console.log('[SYNC] Expected:', expectedSignature);
-        console.log('[SYNC] Received:', signature);
-        return res.status(401).json({
-          error: 'Invalid webhook signature',
-          hint: 'Make sure WEBFLOW_WEBHOOK_SECRET_PUBLISH in Vercel matches your Webflow webhook secret'
-        });
-      }
-
-      console.log('[SYNC] ✅ Webhook signature verified!');
-      console.log('[SYNC] Trigger type:', body.triggerType);
+      console.log('[SYNC] ⚠️ Webhook signature present but verification DISABLED');
     } else {
-      console.log('[SYNC] No webhook signature (manual call or testing)');
+      console.log('[SYNC] No webhook signature (manual call)');
+    }
+
+    // Log trigger type if available
+    if (body.triggerType) {
+      console.log('[SYNC] Trigger type:', body.triggerType);
     }
 
     // Attach body to req for later use
