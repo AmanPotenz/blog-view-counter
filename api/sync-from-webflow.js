@@ -1,6 +1,9 @@
 const Airtable = require('airtable');
 const crypto = require('crypto');
 
+// SERVER-SIDE DEDUPLICATION: Prevent duplicate syncs
+const pendingSync = { promise: null, timestamp: 0 };
+
 module.exports = async (req, res) => {
   // Enable CORS
   res.setHeader('Access-Control-Allow-Origin', '*');
@@ -42,13 +45,36 @@ module.exports = async (req, res) => {
   }
   */
 
-  try {
-    console.log('[SYNC] Starting Webflow to Airtable sync...');
+  // ============================================
+  // DEDUPLICATION: Check if sync is already running
+  // ============================================
+  const now = Date.now();
+  const DEBOUNCE_TIME = 5000; // 5 seconds
 
-    // Log webhook trigger info if available
-    if (req.body && req.body.triggerType) {
-      console.log(`[SYNC] Triggered by: ${req.body.triggerType}`);
+  // If a sync started within last 5 seconds, reuse it
+  if (pendingSync.promise && (now - pendingSync.timestamp) < DEBOUNCE_TIME) {
+    console.log('[SYNC] ⏳ Sync already in progress, reusing existing request');
+    try {
+      const result = await pendingSync.promise;
+      return res.status(200).json(result);
+    } catch (error) {
+      return res.status(500).json({
+        success: false,
+        error: 'Sync failed',
+        details: error.message
+      });
     }
+  }
+
+  // Create new sync promise
+  const syncPromise = (async () => {
+    try {
+      console.log('[SYNC] Starting Webflow to Airtable sync...');
+
+      // Log webhook trigger info if available
+      if (req.body && req.body.triggerType) {
+        console.log(`[SYNC] Triggered by: ${req.body.triggerType}`);
+      }
 
     // ============================================
     // Step 1: Fetch all items from Webflow CMS
@@ -109,13 +135,13 @@ module.exports = async (req, res) => {
     console.log(`[SYNC] Found ${missingBlogs.length} blogs missing in Airtable`);
 
     if (missingBlogs.length === 0) {
-      return res.status(200).json({
+      return {
         success: true,
         message: 'All Webflow blogs already exist in Airtable',
         synced: 0,
         total_webflow: webflowItems.length,
         total_airtable: airtableRecords.length
-      });
+      };
     }
 
     // ============================================
@@ -170,7 +196,7 @@ module.exports = async (req, res) => {
       }
     }
 
-    return res.status(200).json({
+    return {
       success: true,
       message: `Sync completed: ${created.length} created, ${errors.length} errors`,
       created: created,
@@ -182,10 +208,30 @@ module.exports = async (req, res) => {
         created_count: created.length,
         error_count: errors.length
       }
-    });
+    };
 
+    } catch (error) {
+      console.error('[SYNC] Fatal error:', error);
+      throw error;
+    } finally {
+      // Clear pending sync after completion
+      setTimeout(() => {
+        if (pendingSync.timestamp === now) {
+          pendingSync.promise = null;
+        }
+      }, DEBOUNCE_TIME);
+    }
+  })();
+
+  // Store the sync promise
+  pendingSync.promise = syncPromise;
+  pendingSync.timestamp = now;
+
+  // Wait for sync to complete and return result
+  try {
+    const result = await syncPromise;
+    return res.status(200).json(result);
   } catch (error) {
-    console.error('[SYNC] Fatal error:', error);
     return res.status(500).json({
       success: false,
       error: 'Sync failed',
