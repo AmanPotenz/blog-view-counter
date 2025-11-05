@@ -1,0 +1,20 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(dir:*)",
+      "Bash(cat:*)",
+      "Bash(curl:*)",
+      "Bash(git fetch:*)",
+      "WebFetch(domain:airtable.com)",
+      "Bash(tree:*)",
+      "Bash(nul)",
+      "WebFetch(domain:blog-view-counter-ten.vercel.app)",
+      "Bash(vercel --prod:*)",
+      "WebFetch(domain:blog-view-counter-8acfp1p2j-aman-potenzs-projects.vercel.app)",
+      "Bash(git init:*)",
+      "Bash(git add:*)"
+    ],
+    "deny": [],
+    "ask": []
+  }
+}

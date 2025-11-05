@@ -1,0 +1,139 @@
+const Airtable = require('airtable');
+
+// SERVER-SIDE DEDUPLICATION: Track in-flight requests
+// This prevents race conditions when multiple requests arrive simultaneously
+const pendingRequests = new Map();
+
+module.exports = async (req, res) => {
+  // Enable CORS
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+
+  if (req.method === 'OPTIONS') {
+    return res.status(200).end();
+  }
+
+  if (req.method !== 'POST') {
+    return res.status(405).json({ error: 'Method not allowed' });
+  }
+
+  const { slug } = req.body;
+
+  if (!slug) {
+    return res.status(400).json({ error: 'Slug is required' });
+  }
+
+  // ============================================
+  // SERVER-SIDE DEDUPLICATION
+  // ============================================
+  // Check if a request for this slug is already being processed
+  if (pendingRequests.has(slug)) {
+    console.log(`[DEDUP] Request already in-flight for "${slug}", waiting...`);
+    try {
+      // Wait for the existing request to complete and return its result
+      const result = await pendingRequests.get(slug);
+      return res.status(200).json(result);
+    } catch (error) {
+      console.error(`[DEDUP] Error waiting for pending request:`, error);
+      return res.status(500).json({
+        error: 'Failed to process duplicate request',
+        details: error.message
+      });
+    }
+  }
+
+  // Create a new promise for this request
+  const requestPromise = (async () => {
+    try {
+      const base = new Airtable({ apiKey: process.env.AIRTABLE_API_KEY })
+        .base(process.env.AIRTABLE_BASE_ID);
+
+      // Find the record
+      const records = await base(process.env.AIRTABLE_TABLE_NAME)
+        .select({
+          filterByFormula: `{slug} = '${slug}'`,
+          maxRecords: 1
+        })
+        .firstPage();
+
+      let recordId;
+      let newCount;
+      let wasCreated = false;
+
+      if (records.length === 0) {
+        // Record doesn't exist - CREATE IT AUTOMATICALLY!
+        console.log(`[AUTO-CREATE] Creating new record for slug: ${slug}`);
+        const newRecords = await base(process.env.AIRTABLE_TABLE_NAME).create([
+          {
+            fields: {
+              slug: slug,
+              view_count: 1,
+              old_views: 0  // New blogs from Webflow start with 0 old views
+            }
+          }
+        ]);
+        recordId = newRecords[0].id;
+        newCount = 1;
+        wasCreated = true;
+
+        console.log(`[AUTO-CREATE] Successfully created record with view_count: 1, old_views: 0`);
+      } else {
+        // Record exists - UPDATE IT
+        const record = records[0];
+        const currentCount = record.get('view_count') || 0;
+        newCount = currentCount + 1;
+
+        await base(process.env.AIRTABLE_TABLE_NAME).update([
+          {
+            id: record.id,
+            fields: {
+              view_count: newCount
+            }
+          }
+        ]);
+        recordId = record.id;
+
+        console.log(`[UPDATE] Incremented view count from ${currentCount} to ${newCount}`);
+      }
+
+      // Fetch the updated record to get total_views
+      const updatedRecords = await base(process.env.AIRTABLE_TABLE_NAME)
+        .select({
+          filterByFormula: `{slug} = '${slug}'`,
+          maxRecords: 1
+        })
+        .firstPage();
+
+      const updatedRecord = updatedRecords[0];
+      const totalViews = updatedRecord.get('total_views') || newCount;
+
+      return {
+        slug: slug,
+        view_count: newCount,
+        total_views: totalViews,
+        record_id: recordId,
+        auto_created: wasCreated,
+        message: 'View count incremented successfully'
+      };
+
+    } finally {
+      // Always remove from pending requests when done
+      pendingRequests.delete(slug);
+    }
+  })();
+
+  // Store the promise so duplicate requests can wait for it
+  pendingRequests.set(slug, requestPromise);
+
+  try {
+    const result = await requestPromise;
+    return res.status(200).json(result);
+  } catch (error) {
+    console.error('Error:', error);
+    return res.status(500).json({
+      error: 'Failed to increment view count',
+      details: error.message
+    });
+  }
+};

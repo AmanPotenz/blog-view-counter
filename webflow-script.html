@@ -1,0 +1,132 @@
+<!-- Blog View Counter - Add this to Webflow Footer Code -->
+<script>
+(function() {
+  // Your Vercel API URL
+  const API_URL = 'https://blog-view-counter-ten.vercel.app';
+
+  // CLIENT-SIDE DEDUPLICATION: Track in-flight requests
+  const pendingIncrements = new Map();
+
+  /**
+   * Extract blog slug from URL
+   * Assumes blog URLs are in format: /blog/slug-name
+   */
+  function getBlogSlugFromURL() {
+    const path = window.location.pathname;
+    const match = path.match(/\/blog\/([^\/]+)/);
+    return match ? match[1] : null;
+  }
+
+  /**
+   * Increment view count for a blog post (with deduplication)
+   */
+  async function incrementViewCount(slug) {
+    // Check if a request is already in-flight for this slug
+    if (pendingIncrements.has(slug)) {
+      console.log(`⏳ Request already in-flight for "${slug}", reusing...`);
+      return pendingIncrements.get(slug);
+    }
+
+    // Create the request promise
+    const requestPromise = (async () => {
+      try {
+        const response = await fetch(`${API_URL}/api/increment-count`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ slug })
+        });
+        const data = await response.json();
+        return data.total_views || 0;  // Return total_views instead of view_count
+      } catch (error) {
+        console.error('Error incrementing view count:', error);
+        return 0;
+      } finally {
+        // Remove from pending requests when done
+        pendingIncrements.delete(slug);
+      }
+    })();
+
+    // Store the promise so other calls can reuse it
+    pendingIncrements.set(slug, requestPromise);
+    return requestPromise;
+  }
+
+  /**
+   * Get all view counts
+   */
+  async function getAllViewCounts() {
+    try {
+      const response = await fetch(`${API_URL}/api/get-all-counts`);
+      const data = await response.json();
+      return data.posts || [];
+    } catch (error) {
+      console.error('Error getting all view counts:', error);
+      return [];
+    }
+  }
+
+  /**
+   * Display view count on current blog page
+   */
+  function displayViewCount(count) {
+    const elements = document.querySelectorAll('[data-view-count]');
+    elements.forEach(el => {
+      el.textContent = count;
+    });
+  }
+
+  // ==========================================
+  // On Individual Blog Post Pages
+  // ==========================================
+  if (window.location.pathname.includes('/blog/')) {
+    const slug = getBlogSlugFromURL();
+
+    if (slug) {
+      // Check if this page was already viewed in this session
+      const visited = sessionStorage.getItem(`blog-visited-${slug}`);
+
+      if (!visited) {
+        // Increment view count (first visit in this session)
+        incrementViewCount(slug).then(newCount => {
+          sessionStorage.setItem(`blog-visited-${slug}`, '1');
+          displayViewCount(newCount);
+          console.log(`✅ View count for "${slug}": ${newCount}`);
+        });
+      } else {
+        // Already visited - just fetch current count
+        fetch(`${API_URL}/api/get-count?slug=${slug}`)
+          .then(res => res.json())
+          .then(data => {
+            displayViewCount(data.total_views || 0);  // Use total_views instead of view_count
+            console.log(`📊 Current total views for "${slug}": ${data.total_views}`);
+          })
+          .catch(err => console.error('Error fetching view count:', err));
+      }
+    }
+  }
+
+  // ==========================================
+  // On Homepage - Display View Counts
+  // ==========================================
+  else if (window.location.pathname === '/' || window.location.pathname === '') {
+    getAllViewCounts().then(posts => {
+      // Update each blog card with its view count
+      document.querySelectorAll('[data-blog-slug]').forEach(card => {
+        const slug = card.getAttribute('data-blog-slug');
+        const badge = card.querySelector('[data-read-count]');
+
+        if (badge && slug) {
+          const post = posts.find(p => p.slug === slug);
+          if (post && post.total_views > 0) {  // Use total_views instead of view_count
+            badge.textContent = `${post.total_views} reads`;
+          } else {
+            badge.textContent = '0 reads';
+          }
+        }
+      });
+
+      console.log('✅ View counts loaded on homepage');
+    });
+  }
+})();
+</script>

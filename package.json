@@ -1,0 +1,25 @@
+{
+  "name": "blog-view-counter",
+  "version": "1.0.0",
+  "description": "Blog view counter API using Airtable and Vercel",
+  "main": "index.js",
+  "scripts": {
+    "deploy": "vercel --prod"
+  },
+  "keywords": [
+    "airtable",
+    "vercel",
+    "api",
+    "blog",
+    "view-counter"
+  ],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "airtable": "^0.12.2",
+    "dotenv": "^16.6.1"
+  },
+  "devDependencies": {
+    "@vercel/node": "^3.2.29"
+  }
+}
