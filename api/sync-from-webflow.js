@@ -55,6 +55,9 @@ module.exports = async (req, res) => {
 
   if (webhookSignature) {
     console.log('[SYNC] 🔐 Verifying webhook signature...');
+    console.log('[SYNC DEBUG] Raw body:', rawBody);
+    console.log('[SYNC DEBUG] Raw body length:', rawBody ? rawBody.length : 0);
+    console.log('[SYNC DEBUG] Secret length:', process.env.WEBFLOW_WEBHOOK_SECRET_PUBLISH?.length);
 
     // Calculate expected signature using RAW body (exactly what Webflow signed)
     const expectedSignature = crypto
@@ -69,7 +72,13 @@ module.exports = async (req, res) => {
       console.log('[SYNC] ❌ Invalid webhook signature');
       return res.status(401).json({
         error: 'Invalid webhook signature',
-        hint: 'Make sure WEBFLOW_WEBHOOK_SECRET_PUBLISH matches your webhook secret in Webflow'
+        hint: 'Make sure WEBFLOW_WEBHOOK_SECRET_PUBLISH matches your webhook secret in Webflow',
+        debug: {
+          received: webhookSignature,
+          expected: expectedSignature,
+          rawBodyLength: rawBody?.length,
+          rawBodySample: rawBody?.substring(0, 100)
+        }
       });
     }
 
