@@ -12,7 +12,8 @@
       "Bash(vercel --prod:*)",
       "WebFetch(domain:blog-view-counter-8acfp1p2j-aman-potenzs-projects.vercel.app)",
       "Bash(git init:*)",
-      "Bash(git add:*)"
+      "Bash(git add:*)",
+      "Bash(git commit:*)"
     ],
     "deny": [],
     "ask": []
