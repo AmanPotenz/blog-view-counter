@@ -32,41 +32,37 @@ module.exports = async (req, res) => {
 
   if (webhookSignature && webhookSecret) {
     try {
-      // Webflow sends signature as: timestamp.signature
-      const [timestamp, signature] = webhookSignature.split('.');
+      // Webflow sends just the signature hash (no timestamp prefix)
+      const receivedSignature = webhookSignature;
 
       console.log('[SYNC DEBUG] Webhook signature received:', webhookSignature);
-      console.log('[SYNC DEBUG] Timestamp:', timestamp);
-      console.log('[SYNC DEBUG] Signature:', signature);
       console.log('[SYNC DEBUG] Secret exists:', !!webhookSecret);
-      console.log('[SYNC DEBUG] Secret starts with:', webhookSecret?.substring(0, 10));
       console.log('[SYNC DEBUG] Body:', JSON.stringify(req.body));
 
-      // Construct the signed payload
+      // Construct the payload to sign
       const payload = JSON.stringify(req.body);
-      const signedPayload = `${timestamp}.${payload}`;
 
-      console.log('[SYNC DEBUG] Signed payload:', signedPayload);
+      console.log('[SYNC DEBUG] Payload to sign:', payload);
 
-      // Calculate expected signature
+      // Calculate expected signature - sign the raw body
       const expectedSignature = crypto
         .createHmac('sha256', webhookSecret)
-        .update(signedPayload)
+        .update(payload)
         .digest('hex');
 
       console.log('[SYNC DEBUG] Expected signature:', expectedSignature);
-      console.log('[SYNC DEBUG] Received signature:', signature);
-      console.log('[SYNC DEBUG] Match:', signature === expectedSignature);
+      console.log('[SYNC DEBUG] Received signature:', receivedSignature);
+      console.log('[SYNC DEBUG] Match:', receivedSignature === expectedSignature);
 
       // Verify signature matches
-      if (signature !== expectedSignature) {
+      if (receivedSignature !== expectedSignature) {
         console.error('[SYNC] Invalid webhook signature - MISMATCH!');
         return res.status(401).json({
           success: false,
           error: 'Invalid webhook signature',
           message: 'Webhook verification failed',
           debug: {
-            received: signature?.substring(0, 10),
+            received: receivedSignature?.substring(0, 10),
             expected: expectedSignature?.substring(0, 10)
           }
         });
