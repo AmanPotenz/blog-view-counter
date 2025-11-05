@@ -2,7 +2,13 @@ const Airtable = require('airtable');
 const crypto = require('crypto');
 
 // SERVER-SIDE DEDUPLICATION: Prevent duplicate syncs
-const pendingSync = { promise: null, timestamp: 0 };
+// Using a lock mechanism to prevent race conditions
+const syncLock = {
+  locked: false,
+  promise: null,
+  timestamp: 0,
+  waiters: []
+};
 
 module.exports = async (req, res) => {
   // Enable CORS
@@ -46,16 +52,16 @@ module.exports = async (req, res) => {
   */
 
   // ============================================
-  // DEDUPLICATION: Check if sync is already running
+  // DEDUPLICATION: Acquire lock to prevent race conditions
   // ============================================
   const now = Date.now();
   const DEBOUNCE_TIME = 5000; // 5 seconds
 
-  // If a sync started within last 5 seconds, reuse it
-  if (pendingSync.promise && (now - pendingSync.timestamp) < DEBOUNCE_TIME) {
-    console.log('[SYNC] ⏳ Sync already in progress, reusing existing request');
+  // Check if there's a recent sync we can reuse
+  if (syncLock.locked && syncLock.promise && (now - syncLock.timestamp) < DEBOUNCE_TIME) {
+    console.log('[SYNC] ⏳ Sync already in progress (locked), reusing existing request');
     try {
-      const result = await pendingSync.promise;
+      const result = await syncLock.promise;
       return res.status(200).json(result);
     } catch (error) {
       return res.status(500).json({
@@ -65,6 +71,30 @@ module.exports = async (req, res) => {
       });
     }
   }
+
+  // Acquire lock
+  if (syncLock.locked) {
+    console.log('[SYNC] ⚠️ Lock already acquired by another request, waiting...');
+    // Wait a bit and retry
+    await new Promise(resolve => setTimeout(resolve, 100));
+    if (syncLock.promise) {
+      try {
+        const result = await syncLock.promise;
+        return res.status(200).json(result);
+      } catch (error) {
+        return res.status(500).json({
+          success: false,
+          error: 'Sync failed',
+          details: error.message
+        });
+      }
+    }
+  }
+
+  // Lock acquired
+  syncLock.locked = true;
+  syncLock.timestamp = now;
+  console.log('[SYNC] 🔒 Lock acquired, starting sync...');
 
   // Create new sync promise
   const syncPromise = (async () => {
@@ -214,18 +244,19 @@ module.exports = async (req, res) => {
       console.error('[SYNC] Fatal error:', error);
       throw error;
     } finally {
-      // Clear pending sync after completion
+      // Release lock and clear sync after debounce time
       setTimeout(() => {
-        if (pendingSync.timestamp === now) {
-          pendingSync.promise = null;
+        if (syncLock.timestamp === now) {
+          syncLock.locked = false;
+          syncLock.promise = null;
+          console.log('[SYNC] 🔓 Lock released');
         }
       }, DEBOUNCE_TIME);
     }
   })();
 
   // Store the sync promise
-  pendingSync.promise = syncPromise;
-  pendingSync.timestamp = now;
+  syncLock.promise = syncPromise;
 
   // Wait for sync to complete and return result
   try {
