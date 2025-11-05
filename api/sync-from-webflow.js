@@ -1,10 +1,11 @@
 const Airtable = require('airtable');
+const crypto = require('crypto');
 
 module.exports = async (req, res) => {
   // Enable CORS
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, X-Webflow-Signature');
 
   if (req.method === 'OPTIONS') {
     return res.status(200).end();
@@ -14,8 +15,57 @@ module.exports = async (req, res) => {
     return res.status(405).json({ error: 'Method not allowed' });
   }
 
+  // ============================================
+  // Webhook Security: Verify signature if present
+  // ============================================
+  const webhookSignature = req.headers['x-webflow-signature'];
+  const webhookSecret = process.env.WEBFLOW_WEBHOOK_SECRET;
+
+  if (webhookSignature && webhookSecret) {
+    try {
+      // Webflow sends signature as: timestamp.signature
+      const [timestamp, signature] = webhookSignature.split('.');
+
+      // Construct the signed payload
+      const payload = JSON.stringify(req.body);
+      const signedPayload = `${timestamp}.${payload}`;
+
+      // Calculate expected signature
+      const expectedSignature = crypto
+        .createHmac('sha256', webhookSecret)
+        .update(signedPayload)
+        .digest('hex');
+
+      // Verify signature matches
+      if (signature !== expectedSignature) {
+        console.error('[SYNC] Invalid webhook signature');
+        return res.status(401).json({
+          success: false,
+          error: 'Invalid webhook signature',
+          message: 'Webhook verification failed'
+        });
+      }
+
+      console.log('[SYNC] ✅ Webhook signature verified');
+    } catch (error) {
+      console.error('[SYNC] Error verifying webhook signature:', error);
+      return res.status(401).json({
+        success: false,
+        error: 'Webhook verification error',
+        details: error.message
+      });
+    }
+  } else if (webhookSignature && !webhookSecret) {
+    console.warn('[SYNC] ⚠️ Webhook signature present but no secret configured');
+  }
+
   try {
     console.log('[SYNC] Starting Webflow to Airtable sync...');
+
+    // Log webhook trigger info if available
+    if (req.body && req.body.triggerType) {
+      console.log(`[SYNC] Triggered by: ${req.body.triggerType}`);
+    }
 
     // ============================================
     // Step 1: Fetch all items from Webflow CMS
