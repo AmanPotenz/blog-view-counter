@@ -109,24 +109,35 @@
   // On Homepage - Display View Counts
   // ==========================================
   else if (window.location.pathname === '/' || window.location.pathname === '') {
-    getAllViewCounts().then(posts => {
-      // Update each blog card with its view count
-      document.querySelectorAll('[data-blog-slug]').forEach(card => {
-        const slug = card.getAttribute('data-blog-slug');
-        const badge = card.querySelector('[data-read-count]');
 
-        if (badge && slug) {
-          const post = posts.find(p => p.slug === slug);
-          if (post && post.total_views > 0) {  // Use total_views instead of view_count
-            badge.textContent = `${post.total_views} reads`;
-          } else {
-            badge.textContent = '0 reads';
+    // Function to update all blog counts on homepage
+    function updateHomepageCounts() {
+      getAllViewCounts().then(posts => {
+        // Update each blog card with its view count
+        document.querySelectorAll('[data-blog-slug]').forEach(card => {
+          const slug = card.getAttribute('data-blog-slug');
+          const badge = card.querySelector('[data-read-count]');
+
+          if (badge && slug) {
+            const post = posts.find(p => p.slug === slug);
+            if (post && post.total_views > 0) {  // Use total_views instead of view_count
+              badge.textContent = `${post.total_views} reads`;
+            } else {
+              badge.textContent = '0 reads';
+            }
           }
-        }
-      });
+        });
 
-      console.log('✅ View counts loaded on homepage');
-    });
+        console.log('✅ View counts loaded on homepage');
+      });
+    }
+
+    // Initial load
+    updateHomepageCounts();
+
+    // Auto-refresh every 30 seconds to catch new blogs
+    setInterval(updateHomepageCounts, 30000);
+    console.log('🔄 Auto-refresh enabled (every 30 seconds)');
   }
 })();
 </script>
