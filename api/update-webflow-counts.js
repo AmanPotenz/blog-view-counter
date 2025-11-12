@@ -140,47 +140,37 @@ module.exports = async (req, res) => {
 
     if (updated.length > 0) {
       try {
-        const collectionResponse = await fetch(
-          `https://api.webflow.com/v2/collections/${process.env.WEBFLOW_COLLECTION_ID}`,
-          {
-            headers: {
-              'Authorization': `Bearer ${process.env.WEBFLOW_API_TOKEN}`,
-              'accept': 'application/json'
+        const siteId = process.env.WEBFLOW_SITE_ID;
+
+        if (siteId) {
+          console.log(`[UPDATE-COUNTS] Publishing site: ${siteId}`);
+
+          const publishResponse = await fetch(
+            `https://api.webflow.com/v2/sites/${siteId}/publish`,
+            {
+              method: 'POST',
+              headers: {
+                'Authorization': `Bearer ${process.env.WEBFLOW_API_TOKEN}`,
+                'accept': 'application/json',
+                'content-type': 'application/json'
+              },
+              body: JSON.stringify({
+                publishToWebflowSubdomain: true
+              })
             }
+          );
+
+          if (publishResponse.ok) {
+            publishStatus = 'success';
+            console.log('[UPDATE-COUNTS] ✅ Site published successfully');
+          } else {
+            const publishError = await publishResponse.json();
+            publishStatus = `failed: ${publishError.message || JSON.stringify(publishError)}`;
+            console.log('[UPDATE-COUNTS] ❌ Failed to publish:', publishError);
           }
-        );
-
-        if (collectionResponse.ok) {
-          const collectionData = await collectionResponse.json();
-          const siteId = collectionData.siteId;
-
-          if (siteId) {
-            console.log(`[UPDATE-COUNTS] Publishing site: ${siteId}`);
-
-            const publishResponse = await fetch(
-              `https://api.webflow.com/v2/sites/${siteId}/publish`,
-              {
-                method: 'POST',
-                headers: {
-                  'Authorization': `Bearer ${process.env.WEBFLOW_API_TOKEN}`,
-                  'accept': 'application/json',
-                  'content-type': 'application/json'
-                },
-                body: JSON.stringify({
-                  publishToWebflowSubdomain: true
-                })
-              }
-            );
-
-            if (publishResponse.ok) {
-              publishStatus = 'success';
-              console.log('[UPDATE-COUNTS] ✅ Site published successfully');
-            } else {
-              const publishError = await publishResponse.json();
-              publishStatus = `failed: ${publishError.message}`;
-              console.log('[UPDATE-COUNTS] ❌ Failed to publish:', publishError);
-            }
-          }
+        } else {
+          publishStatus = 'failed: WEBFLOW_SITE_ID not set';
+          console.log('[UPDATE-COUNTS] ❌ WEBFLOW_SITE_ID environment variable not set');
         }
       } catch (publishError) {
         publishStatus = `error: ${publishError.message}`;

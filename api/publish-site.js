@@ -8,31 +8,12 @@ module.exports = async (req, res) => {
   }
 
   try {
-    // Get site ID from collection
-    const collectionResponse = await fetch(
-      `https://api.webflow.com/v2/collections/${process.env.WEBFLOW_COLLECTION_ID}`,
-      {
-        headers: {
-          'Authorization': `Bearer ${process.env.WEBFLOW_API_TOKEN}`,
-          'accept': 'application/json'
-        }
-      }
-    );
-
-    if (!collectionResponse.ok) {
-      const errorData = await collectionResponse.json();
-      return res.status(500).json({
-        error: 'Failed to get collection',
-        details: errorData
-      });
-    }
-
-    const collectionData = await collectionResponse.json();
-    const siteId = collectionData.siteId;
+    // Get site ID from environment variable
+    const siteId = process.env.WEBFLOW_SITE_ID;
 
     if (!siteId) {
       return res.status(500).json({
-        error: 'Site ID not found in collection data'
+        error: 'WEBFLOW_SITE_ID environment variable not set'
       });
     }
 
